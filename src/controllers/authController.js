@@ -2,7 +2,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
 // const config = require("../config");
-const UserModel = require("../models/dbModel");
+const UserModel = require("../models/userModel");
 const ExpenseModel = require("../models/expenseModel");
 
 const JWT_SECRET = "jwt-secret-token";
@@ -51,12 +51,13 @@ function postLogin(req, res, next) {
       if (!userFound) {
         return res.json({ status: 401, message: "Invalid Credentials" });
       }
+      req.session.userId = userFound._id.toString();
       bcrypt.compare(password, userFound.password).then((isMatch) => {
         if (!isMatch) {
           return res.json({ status: 401, message: "Invalid Credentials" });
         }
         const token = jwt.sign(
-          { userId: userFound._id, userName: userFound.userName },
+          { userId: userFound._id.toString(), userName: userFound.userName },
           JWT_SECRET,
           {
             expiresIn: "1h",
@@ -76,7 +77,7 @@ function postValidationToken(req, res, next) {
 
   if (myToken) {
     try {
-      const verifiedToken = jwt.verify(myToken, JWT_SECRET); 
+      const verifiedToken = jwt.verify(myToken, JWT_SECRET);
       return res.json({ status: 200, message: true });
     } catch (error) {
       return res.json({ status: 401, message: false });
@@ -89,8 +90,11 @@ function postValidationToken(req, res, next) {
 function postExpense(req, res, next) {
   const { date, paymentType, amount, categoryType, remarks } = req.body;
 
+  console.log(req.session);  
+  console.log(req.session.userId);  
+
   const newExpense = new ExpenseModel({
-    userId: req.user,
+    userId: req.session.userId,
     date,
     paymentType,
     amount,
@@ -102,12 +106,12 @@ function postExpense(req, res, next) {
     .save()
     .then((data) => {
       console.log(data);
-      
+
       res.json({ status: 200, message: "Expense added successfully" });
     })
     .catch((err) => {
       console.log("Here", err);
-      
+
       return res.json({ status: 500, message: err.message });
     });
 }
