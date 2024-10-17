@@ -51,7 +51,6 @@ function postLogin(req, res, next) {
       if (!userFound) {
         return res.json({ status: 401, message: "Invalid Credentials" });
       }
-      req.session.userId = userFound._id.toString();
       bcrypt.compare(password, userFound.password).then((isMatch) => {
         if (!isMatch) {
           return res.json({ status: 401, message: "Invalid Credentials" });
@@ -90,30 +89,121 @@ function postValidationToken(req, res, next) {
 function postExpense(req, res, next) {
   const { date, paymentType, amount, categoryType, remarks } = req.body;
 
-  console.log(req.session);  
-  console.log(req.session.userId);  
+  const token = req.headers.authorization;
+  const myToken = token?.split(" ")[1];
 
-  const newExpense = new ExpenseModel({
-    userId: req.session.userId,
-    date,
-    paymentType,
-    amount,
-    categoryType,
-    remarks,
-  });
+  if (myToken) {
+    try {
+      const verifiedToken = jwt.verify(myToken, JWT_SECRET);
 
-  newExpense
-    .save()
-    .then((data) => {
-      console.log(data);
+      const newExpense = new ExpenseModel({
+        userId: verifiedToken.userId,
+        date,
+        paymentType,
+        amount,
+        categoryType,
+        remarks,
+      });
 
-      res.json({ status: 200, message: "Expense added successfully" });
-    })
-    .catch((err) => {
-      console.log("Here", err);
-
-      return res.json({ status: 500, message: err.message });
-    });
+      newExpense
+        .save()
+        .then(() => {
+          return res.json({
+            status: 200,
+            message: "Successful",
+          });
+        })
+        .catch((err) => {
+          return res.json({ status: 500, message: err.message });
+        });
+    } catch (error) {
+      return res.json({ status: 401, message: error.message });
+    }
+  } else {
+    return res.json({ status: 401, message: "Token not received" });
+  }
 }
 
-module.exports = { postSignup, postLogin, postValidationToken, postExpense };
+async function getMyExpenses(req, res, next) {
+  const token = req.headers.authorization;
+  const myToken = token?.split(" ")[1];
+
+  if (myToken) {
+    try {
+      const verifiedToken = jwt.verify(myToken, JWT_SECRET);
+      const loggedUser = verifiedToken.userId;
+
+      await ExpenseModel.find({ userId: loggedUser })
+        .then((data) => {
+          return res.json({
+            status: 200,
+            message: "Data fetched successfully",
+            expenses: data,
+          });
+        })
+        .catch((err) => {
+          return res.json({ status: 500, message: err.message });
+        });
+    } catch (err) {
+      return res.json({ status: 401, message: err.message });
+    }
+  } else {
+    return res.json({ status: 401, message: "Token not received" });
+  }
+}
+
+async function getLoggedUsername(req, res, next) {
+  const token = req.headers.authorization;
+  const myToken = token?.split(" ")[1];
+
+  if (myToken) {
+    try {
+      const verifiedToken = jwt.verify(myToken, JWT_SECRET);
+      const loggedUser = verifiedToken.userName;
+
+      await UserModel.find({ userName: loggedUser })
+        .then((data) => {
+          return res.json({
+            status: 200,
+            message: "Data fetched successfully",
+            username: data,
+          });
+        })
+        .catch((err) => {
+          return res.json({ status: 500, message: err.message });
+        });
+    } catch (error) {
+      return res.json({ status: 401, message: error.message });
+    }
+  } else {
+    return res.json({ status: 401, message: "Token not received" });
+  }
+}
+
+function postChangeUsername(req, res, next) {
+  const { username } = req.body;
+  console.log(username);
+
+  // const token = req.headers.authorization;
+  // const myToken = token?.split(" ")[1];
+
+  // UserModel.findOne({})
+  //   .then(() => {})
+  //   .catch(() => {});
+}
+
+function postChangePassword(req, res, next) {
+  const { currentPassword, newPassword } = req.body;
+  console.log(currentPassword, newPassword);
+}
+
+module.exports = {
+  postSignup,
+  postLogin,
+  postValidationToken,
+  postExpense,
+  getMyExpenses,
+  getLoggedUsername,
+  postChangeUsername,
+  postChangePassword,
+};
