@@ -166,7 +166,7 @@ async function getLoggedUsername(req, res, next) {
           return res.json({
             status: 200,
             message: "Data fetched successfully",
-            username: data,
+            userName: data[0].userName,
           });
         })
         .catch((err) => {
@@ -180,21 +180,136 @@ async function getLoggedUsername(req, res, next) {
   }
 }
 
-function postChangeUsername(req, res, next) {
+async function postChangeUsername(req, res, next) {
   const { username } = req.body;
-  console.log(username);
 
-  // const token = req.headers.authorization;
-  // const myToken = token?.split(" ")[1];
+  const token = req.headers.authorization;
+  const myToken = token?.split(" ")[1];
 
-  // UserModel.findOne({})
-  //   .then(() => {})
-  //   .catch(() => {});
+  if (myToken) {
+    const verifiedToken = jwt.verify(myToken, JWT_SECRET);
+    const loggedUser = verifiedToken.userId;
+
+    try {
+      await UserModel.findById({ _id: loggedUser })
+        .then(async (user) => {
+          await UserModel.updateOne(
+            {
+              _id: loggedUser,
+            },
+            {
+              $set: {
+                userName: username,
+              },
+            }
+          );
+
+          return res.json({
+            status: 200,
+            message: "Username updated successfully",
+          });
+        })
+        .catch((err) => {
+          console.log("ERROR :", err.message);
+          return res.json({ status: 500, message: err.message });
+        });
+    } catch (error) {
+      return res.json({ status: 401, message: error.message });
+    }
+  } else {
+    return res.json({ status: 401, message: "Token not received" });
+  }
 }
 
-function postChangePassword(req, res, next) {
-  const { currentPassword, newPassword } = req.body;
-  console.log(currentPassword, newPassword);
+async function postChangePassword(req, res, next) {
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+
+  const token = req.headers.authorization;
+  const myToken = token?.split(" ")[1];
+
+  if (myToken) {
+    const verifiedToken = jwt.verify(myToken, JWT_SECRET);
+    const loggedUser = verifiedToken.userId;
+
+    try {
+      await UserModel.findById({ _id: loggedUser })
+        .then((user) => {
+          bcrypt
+            .compare(currentPassword, user.password)
+            .then(async (isMatch) => {
+              if (!isMatch) {
+                return res.json({
+                  status: 401,
+                  message: "Incorrect current password",
+                });
+              }
+              await bcrypt
+                .hash(newPassword, 12)
+                .then(async (hashedPassword) => {
+                  await UserModel.updateOne(
+                    {
+                      _id: loggedUser,
+                    },
+                    {
+                      $set: {
+                        password: hashedPassword,
+                      },
+                    }
+                  );
+                })
+                .catch((err) => {
+                  return res.json({ status: 401, message: err.message });
+                });
+
+              return res.json({
+                status: 200,
+                message: "Password updated successfully",
+              });
+            })
+            .catch((err) => {
+              console.log("ERROR 1 :", err.message);
+              return res.json({ status: 500, message: err.message });
+            });
+        })
+        .catch((err) => {
+          return res.json({ status: 500, message: err.message });
+        });
+    } catch (error) {
+      return res.json({ status: 401, message: error.message });
+    }
+  } else {
+    return res.json({ status: 401, message: "Token not received" });
+  }
+}
+
+function postResetPassword(req, res, next) {
+  const { email, newPassword, confirmPassword } = req.body;
+
+  UserModel.findOne({ email })
+    .then((userFound) => {
+      if (!userFound) {
+        return res.json({ status: 404, message: "Email not found" });
+      }
+      bcrypt
+        .hash(newPassword, 12)
+        .then(async (hashedPassword) => {
+          await UserModel.updateOne(
+            { email: email },
+            {
+              $set: {
+                password: hashedPassword,
+              },
+            }
+          );
+        })
+        .catch((err) => {
+          return res.json({ status: 401, message: err.message });
+        });
+      return res.json({ status: 200, message: "Password reset successfully" });
+    })
+    .catch((err) => {
+      return res.json({ status: 401, message: err.message });
+    });
 }
 
 module.exports = {
@@ -206,4 +321,5 @@ module.exports = {
   getLoggedUsername,
   postChangeUsername,
   postChangePassword,
+  postResetPassword,
 };
